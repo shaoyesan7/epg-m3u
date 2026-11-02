@@ -1,0 +1,58 @@
+name: Regenerate EPG
+
+# 每天 00:00 (Asia/Shanghai) 重新抓取上游 EPG 并生成 epg.xml / epg.gz
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 实际是 UTC，0 点 UTC = 北京 8 点
+  workflow_dispatch:
+    branches: [main]
+
+# 允许在 UI 上点 "Run workflow" 手动触发
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # M3U 放 m3u/ 目录，取第一个 .m3u 文件作为输入
+      - name: Build EPG
+        working-directory: .
+        run: |
+          set -e
+          M3U_FILE=$(find m3u -maxdepth 1 -name '*.m3u' | head -1)
+          echo "Using M3U: $M3U_FILE"
+          python3 epg_build.py --m3u "$M3U_FILE" --out epg/epg.xml --gzip --autofill \
+            --past 7 --future 3
+          ls -la epg/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: epg/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # 只在 main 分支部署
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+        with:
+          artifact: pages_artifact
