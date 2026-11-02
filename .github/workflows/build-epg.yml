@@ -1,7 +1,7 @@
 name: Regenerate EPG
 
-# 每天 00:00 UTC（北京时间 08:00）自动抓取上游 EPG 并 commit 回仓库，
-# GitHub Pages 读仓库里 epg/epg.xml.gz 静态文件，实现自动更新。
+# 每天 00:00 UTC（北京时间 08:00）抓取上游 EPG，commit 回仓库 epg/ 目录，
+# GitHub Pages（branch 部署）自动发布，App 端 EPG 即更新。
 on:
   schedule:
     - cron: '0 0 * * *'
