@@ -1,7 +1,8 @@
 name: Regenerate EPG
 
-# 每天 00:00 UTC（北京时间 08:00）抓取上游 EPG，commit 回仓库 epg/ 目录，
-# GitHub Pages（branch 部署）自动发布，App 端 EPG 即更新。
+# 每天 00:00 UTC（北京时间 08:00）抓上游 EPG，commit 回仓库 epg/ 目录。
+# 关键修复：同时生成一个带日期的 epg-latest.xml.gz，index.html 指向它，
+# 彻底绕开 GitHub Pages CDN 对固定文件名的旧缓存。
 on:
   schedule:
     - cron: '0 0 * * *'
@@ -26,16 +27,32 @@ jobs:
           M3U_FILE=$(find m3u -maxdepth 1 -name '*.m3u' | head -1)
           echo "Using M3U: $M3U_FILE"
           python3 epg_build.py --m3u "$M3U_FILE" --out epg/epg.xml --gzip --autofill --past 7 --future 3
+          # 生成带日期的最新 EPG（CDN 不缓存不同文件名）
+          DATE=$(date +%Y%m%d)
+          cp epg/epg.xml.gz "epg/epg-$DATE.xml.gz"
+          # index.html 指向最新版，并写生成时间戳
+          python3 - <<'PYEOF'
+          import re, time, shutil
+          xml = open("epg/epg.xml", encoding="utf-8").read()
+          m = re.search(r'generator-info-date="([^"]+)"', xml)
+          gen = m.group(1) if m else time.strftime("%Y-%m-%d %H:%M:%S")
+          import datetime
+          date = datetime.date.today().strftime("%Y%m%d")
+          html = f"""<html><head><meta charset="utf-8"><title>EPG latest</title>
+          <meta http-equiv="refresh" content="0;url=epg-{date}.xml.gz"></head>
+          <body><h1>EPG 已生成 {gen}</h1>
+          <a href="epg-{date}.xml.gz">epg-{date}.xml.gz</a><br>
+          <a href="epg.xml.gz">epg.xml.gz (兼容旧版)</a>
+          </body></html>"""
+          open("epg/index.html","w").write(html)
+          PYEOF
           ls -la epg/
 
       - name: Commit & push updated EPG
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add epg/epg.xml epg/epg.xml.gz
-          if git diff --cached --quiet; then
-            echo "EPG unchanged, skip commit"
-          else
-            git commit -m "auto: regenerate EPG $(date -u +\%Y-\%m-\%d)"
-            git push
-          fi
+          DATE=$(date +%Y%m%d)
+          git add epg/epg.xml epg/epg.xml.gz "epg/epg-$DATE.xml.gz" epg/index.html
+          git commit -m "auto: regenerate EPG $(date -u +\%Y-\%m-\%d)"
+          git push
