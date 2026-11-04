@@ -333,7 +333,11 @@ def main():
     print("Wrote %s (%d bytes)" % (args.out, len(xml_text.encode('utf-8'))), file=sys.stderr)
     if args.gzip:
         base = args.out
-        gz = base[:-4] + ".gz" if base.endswith(".xml") else base + ".gz"
+        if base.endswith(".xml"):
+            # epg-20261104.xml -> epg-20261104.xml.gz (保留完整 .xml 后缀)
+            gz = base[:-4] + ".gz"
+        else:
+            gz = base + ".gz"
         with open(gz, "wb") as f:
             f.write(gzip.compress(xml_text.encode("utf-8")))
         print("Wrote %s" % gz, file=sys.stderr)
